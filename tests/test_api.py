@@ -212,3 +212,48 @@ def test_https_session_cookie_is_secure(client):
     )
     assert response.status_code == 204
     assert "Secure" in response.headers["set-cookie"]
+
+
+def test_test_email_auth_configuration_and_response(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(api, "send_test_email", lambda: calls.append("sent"))
+    route = "/api/notifications/email/test"
+    monkeypatch.setenv("SMTP_HOST", "")
+    settings.cache_clear()
+    assert client.post(route, auth=("wrong", "wrong")).status_code == 401
+    assert client.post(route).status_code == 409
+    assert calls == []
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SMTP_FROM", "adwatch@example.test")
+    monkeypatch.setenv("SMTP_TO", "owner@example.test")
+    settings.cache_clear()
+    assert client.post(route, headers={"Origin": "https://evil.test"}).status_code == 403
+    assert calls == []
+    result = client.post(route)
+    assert result.status_code == 200
+    assert "accepted by your mail server" in result.json()["message"]
+    assert calls == ["sent"]
+
+
+@pytest.mark.parametrize("error_kind", ["auth", "recipient", "connection"])
+def test_test_email_errors_do_not_expose_secrets(client, monkeypatch, error_kind):
+    import smtplib
+
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SMTP_FROM", "adwatch@example.test")
+    monkeypatch.setenv("SMTP_TO", "owner@example.test")
+    settings.cache_clear()
+    errors = {
+        "auth": smtplib.SMTPAuthenticationError(535, b"private password and account"),
+        "recipient": smtplib.SMTPRecipientsRefused({"private@example.test": (550, b"no")}),
+        "connection": OSError("private password and account"),
+    }
+
+    def fail():
+        raise errors[error_kind]
+
+    monkeypatch.setattr(api, "send_test_email", fail)
+    result = client.post("/api/notifications/email/test")
+    assert result.status_code == 502
+    assert "private" not in result.text
+    assert "check" in result.text.lower()

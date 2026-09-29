@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import io
 import secrets
+import smtplib
 import time
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -20,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from adwatch.config import settings
 from adwatch.db import Session, init_db, now
 from adwatch.models import Ad, Alert, Competitor, Delivery, Scan, WorkerState
+from adwatch.notifications import send_test_email
 from adwatch.scraper import build_url, page_id_from_source
 from adwatch.service import enqueue
 
@@ -212,6 +214,26 @@ def sign_out():
 def health(session=Depends(db)):
     session.execute(select(1))
     return {"status": "ok"}
+
+
+@app.post("/api/notifications/email/test", dependencies=[Depends(auth)])
+def test_email():
+    if not settings().smtp_host:
+        raise HTTPException(
+            409, "Email is not configured. Update SMTP settings and restart services."
+        )
+    try:
+        send_test_email()
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(502, "Mail authentication failed. Check SMTP credentials.") from None
+    except smtplib.SMTPRecipientsRefused:
+        raise HTTPException(
+            502, "Mail server rejected one or more recipients. Check SMTP_TO."
+        ) from None
+    except Exception:
+        # SMTP errors can contain credentials or account details; never return raw errors.
+        raise HTTPException(502, "Test email failed. Check SMTP settings and try again.") from None
+    return {"message": "Test email accepted by your mail server. Check your inbox and spam folder."}
 
 
 @app.get("/api/overview", dependencies=[Depends(auth)])

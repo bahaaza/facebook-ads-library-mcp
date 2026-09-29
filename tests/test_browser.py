@@ -10,7 +10,7 @@ import time
 import httpx
 import pytest
 from playwright.async_api import Browser
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 from sqlalchemy.orm import sessionmaker
 
 from adwatch.db import make_engine
@@ -151,6 +151,45 @@ def test_dashboard_workflows_and_mobile(tmp_path):
             page.get_by_role("heading", name="Custom keychains", exact=True).wait_for()
             page.get_by_role("button", name="Settings & delivery", exact=True).click()
             page.get_by_role("heading", name="Alert delivery", exact=True).wait_for()
+            mail_button = page.get_by_role("button", name="Send test email", exact=True)
+            expect(mail_button).to_be_disabled()
+            # Exercise the real UI without sending external mail.
+            page.route(
+                "**/api/overview",
+                lambda route: route.fulfill(
+                    json={
+                        "competitors": 1,
+                        "enabled": 0,
+                        "ads": 1,
+                        "new_week": 1,
+                        "unread": 0,
+                        "failed_competitors": 0,
+                        "worker_online": True,
+                        "worker_heartbeat": None,
+                        "channels": ["email"],
+                        "failed_deliveries": 0,
+                    }
+                ),
+            )
+            page.get_by_role("button", name="Refresh dashboard", exact=True).click()
+            expect(mail_button).to_be_enabled()
+            message = "Test email accepted by your mail server. Check your inbox and spam folder."
+            page.route(
+                "**/api/notifications/email/test",
+                lambda route: route.fulfill(json={"message": message}),
+            )
+            mail_button.click()
+            page.get_by_text(message, exact=True).wait_for()
+            expect(mail_button).to_be_enabled()
+            page.unroute("**/api/notifications/email/test")
+            failure = "Test email failed. Check SMTP settings and try again."
+            page.route(
+                "**/api/notifications/email/test",
+                lambda route: route.fulfill(status=502, json={"detail": failure}),
+            )
+            mail_button.click()
+            page.get_by_role("alert").get_by_text(failure, exact=True).wait_for()
+            expect(mail_button).to_be_enabled()
             page.set_viewport_size({"width": 390, "height": 844})
             page.get_by_role("button", name="Ad library", exact=True).click()
             page.get_by_role("heading", name="Custom keychains", exact=True).wait_for()

@@ -1329,3 +1329,10 @@ code {
   color: #a63838;
   line-height: 1.5;
 }
+.settings-card p.mail-success {
+  color: #386c51;
+}
+
+.settings-card p.login-error {
+  color: #a63838;
+}

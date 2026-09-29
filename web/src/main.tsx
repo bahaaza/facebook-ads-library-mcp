@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   LoaderCircle,
   LogOut,
+  Mail,
   Pause,
   Play,
   Plus,
@@ -218,6 +219,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
     [edit, setEdit] = useState<Competitor | null>(null);
   const [note, setNote] = useState(""),
     [group, setGroup] = useState(false);
+  const [mailTesting, setMailTesting] = useState(false);
+  const [mailResult, setMailResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   useEffect(() => {
     const t = setTimeout(() => setSearch(query), 300);
     return () => clearTimeout(t);
@@ -1027,6 +1033,48 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                   Set SMTP_HOST, SMTP_PORT, SMTP_FROM, SMTP_TO and
                   authentication. SMTP_TLS supports starttls or ssl.
                 </p>
+                <button
+                  disabled={
+                    mailTesting || !overview?.channels.includes("email")
+                  }
+                  onClick={async () => {
+                    setMailTesting(true);
+                    setMailResult(null);
+                    try {
+                      const result = await api<{ message: string }>(
+                        "/notifications/email/test",
+                        "POST",
+                      );
+                      setMailResult({ ok: true, message: result.message });
+                    } catch (e) {
+                      setMailResult({
+                        ok: false,
+                        message: (e as Error).message,
+                      });
+                    } finally {
+                      setMailTesting(false);
+                    }
+                  }}
+                >
+                  {mailTesting ? (
+                    <LoaderCircle size={16} className="spin" />
+                  ) : (
+                    <Mail size={16} />
+                  )}
+                  {mailTesting ? "Sending test email…" : "Send test email"}
+                </button>
+                <p className="hint">
+                  Sends one test message to the recipients configured for email
+                  alerts.
+                </p>
+                {mailResult && (
+                  <p
+                    role={mailResult.ok ? "status" : "alert"}
+                    className={mailResult.ok ? "mail-success" : "login-error"}
+                  >
+                    {mailResult.message}
+                  </p>
+                )}
                 <div className="setting-row">
                   <strong>Telegram</strong>
                   <span

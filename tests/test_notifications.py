@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import select
 
 from adwatch.config import settings
@@ -45,3 +46,65 @@ def test_persistent_outbox_retries_and_no_duplicate_events(db_session, monkeypat
     assert delivery.status == "sent"
     assert delivery.sent_at
     settings.cache_clear()
+
+
+@pytest.mark.parametrize("tls", ["starttls", "ssl"])
+def test_test_email_uses_configured_transport_and_unique_messages(monkeypatch, tls):
+    from adwatch import notifications
+
+    for key, value in {
+        "SMTP_HOST": "smtp.example.test",
+        "SMTP_PORT": "587" if tls == "starttls" else "465",
+        "SMTP_TLS": tls,
+        "SMTP_USERNAME": "smtp-user",
+        "SMTP_PASSWORD": "smtp-secret",
+        "SMTP_FROM": "adwatch@example.test",
+        "SMTP_TO": "one@example.test, two@example.test",
+        "PUBLIC_URL": "http://localhost:18473",
+    }.items():
+        monkeypatch.setenv(key, value)
+    settings.cache_clear()
+    calls = []
+    messages = []
+
+    class SMTP:
+        def __init__(self, host, port, **kwargs):
+            calls.append(("connect", host, port, kwargs))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def starttls(self, **kwargs):
+            assert kwargs["context"].check_hostname
+            calls.append(("starttls",))
+
+        def login(self, username, password):
+            assert (username, password) == ("smtp-user", "smtp-secret")
+            calls.append(("login",))
+
+        def send_message(self, message):
+            messages.append(message)
+            return {}
+
+    monkeypatch.setattr(notifications.smtplib, "SMTP", SMTP)
+    monkeypatch.setattr(notifications.smtplib, "SMTP_SSL", SMTP)
+    try:
+        notifications.send_test_email()
+        notifications.send_test_email()
+        assert len(messages) == 2
+        assert messages[0]["Subject"] == "[Adwatch] Test email"
+        assert messages[0]["To"] == "one@example.test, two@example.test"
+        assert "http://localhost:18473" in messages[0].get_content()
+        assert "smtp-secret" not in messages[0].as_string()
+        assert messages[0]["Message-ID"] != messages[1]["Message-ID"]
+        assert ("login",) in calls
+        if tls == "starttls":
+            assert ("starttls",) in calls
+        else:
+            assert calls[0][3]["context"].check_hostname
+            assert ("starttls",) not in calls
+    finally:
+        settings.cache_clear()

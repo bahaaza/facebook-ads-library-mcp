@@ -78,6 +78,8 @@ SMTP_TLS=starttls
 
 For implicit TLS use `SMTP_TLS=ssl` and your provider's TLS port, usually 465. Both modes verify certificates. Multiple email recipients may be comma separated.
 
+After restarting services, open **Settings & delivery** and click **Send test email**. It sends one message to `SMTP_TO` and shows whether your mail server accepted it. Check your inbox and spam folder to confirm receipt.
+
 For Telegram, create a bot with BotFather, start a conversation with it, then set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Set both values together. The token is never returned to the browser or logged.
 
 After editing configuration:
