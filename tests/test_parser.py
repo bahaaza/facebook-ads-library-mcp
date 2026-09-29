@@ -4,6 +4,7 @@ Run:  python -m pytest tests/ -q
 These do not hit the network — they exercise _parse_ad_library_markdown against a
 fixture that mirrors the markdown crawl4ai produces for a rendered Ad Library page.
 """
+
 import facebook_ads_mcp_complete as m
 
 FIXTURE = """
@@ -58,7 +59,7 @@ def test_landing_url_decoded():
 def test_cta_and_link_text():
     a, b = _parsed()
     assert a["cta"] == "Learn more"
-    assert a["link_text"] == "Agenda tu diagnostico"   # leading shouted domain dropped
+    assert a["link_text"] == "Agenda tu diagnostico"  # leading shouted domain dropped
     assert b["cta"] == "Shop now"
 
 
@@ -81,6 +82,10 @@ def test_only_scraping_tools_are_registered():
     # The server is a pure Ad Library scraper — no ads_archive API tools.
     assert hasattr(m, "search_ad_library")
     assert hasattr(m, "scrape_ad_library_url")
-    for gone in ("search_facebook_ads", "analyze_ad_performance_metrics",
-                 "generate_facebook_intelligence_report", "fb_api"):
+    for gone in (
+        "search_facebook_ads",
+        "analyze_ad_performance_metrics",
+        "generate_facebook_intelligence_report",
+        "fb_api",
+    ):
         assert not hasattr(m, gone), f"{gone} should have been removed"

@@ -1,10 +1,2 @@
-# MCP server framework
-fastmcp>=2.6.1
-
-# Headless-browser rendering + HTML->markdown for the Ad Library scraper.
-# Pulls in playwright as a dependency; after installing, run:
-#   python -m playwright install chromium
-crawl4ai>=0.7.0
-
-# --- dev only ---
-# pytest>=7.4.0
+# Locked dependencies are managed with uv; this shim preserves pip installation.
+-e .

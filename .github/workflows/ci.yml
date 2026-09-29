@@ -1,0 +1,49 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: adwatch
+          POSTGRES_DB: adwatch_test
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U adwatch" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+      - run: uv sync --frozen --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+        env:
+          TEST_POSTGRES_URL: postgresql+psycopg://adwatch:test@localhost:5432/adwatch_test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci && npm run format:check && npm run build
+        working-directory: web
+      - run: uv run python -m playwright install --with-deps chromium
+      - run: uv run pytest tests/test_browser.py -q
+        env:
+          RUN_BROWSER_TESTS: 1
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

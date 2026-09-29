@@ -1,0 +1,59 @@
+name: adwatch
+x-common: &common
+  build: .
+  image: adwatch:local
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://adwatch:${POSTGRES_PASSWORD:?Run scripts/setup.sh first}@db:5432/adwatch
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: adwatch
+      POSTGRES_DB: adwatch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.sh first}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adwatch -d adwatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    <<: *common
+    environment:
+      DATABASE_URL: postgresql+psycopg://adwatch:${POSTGRES_PASSWORD:?Run scripts/setup.sh first}@db:5432/adwatch
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run scripts/setup.sh first}
+    ports:
+      - "127.0.0.1:${PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+  worker:
+    <<: *common
+    command: ["python", "-m", "adwatch.worker"]
+    shm_size: 1gb
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "adwatch.health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+volumes:
+  postgres_data:
