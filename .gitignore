@@ -11,3 +11,4 @@ outputs/
 .ruff_cache/
 *.db
 .gitnexus/
+*.tsbuildinfo
