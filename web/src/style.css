@@ -411,6 +411,7 @@ h2 {
 }
 .filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   background: #fff;
@@ -492,8 +493,10 @@ h2 {
   margin-top: 4px;
 }
 .ad-top .icon-button {
-  margin-left: auto;
   color: #8d9d86;
+}
+.ad-top .icon-button:first-of-type {
+  margin-left: auto;
 }
 .ad-top .is-saved {
   color: #3c764b;

@@ -12,6 +12,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  EyeOff,
   LayoutGrid,
   LoaderCircle,
   LogOut,
@@ -65,6 +66,7 @@ type Ad = {
   last_seen: string;
   baseline: boolean;
   saved: boolean;
+  ignored: boolean;
   notes: string;
   creative_key: string;
   data: {
@@ -208,6 +210,7 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
     [search, setSearch] = useState(""),
     [filter, setFilter] = useState(""),
     [saved, setSaved] = useState(false),
+    [ignoredOnly, setIgnoredOnly] = useState(false),
     [newOnly, setNewOnly] = useState(false);
   const [offset, setOffset] = useState(0),
     [total, setTotal] = useState(0),
@@ -228,7 +231,10 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
     const t = setTimeout(() => setSearch(query), 300);
     return () => clearTimeout(t);
   }, [query]);
-  useEffect(() => setOffset(0), [search, filter, saved, newOnly, tab]);
+  useEffect(
+    () => setOffset(0),
+    [search, filter, saved, newOnly, ignoredOnly, tab],
+  );
   const sequence = useRef(0);
   const load = useCallback(async () => {
     const requestId = ++sequence.current;
@@ -245,12 +251,17 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
           q: search,
           saved: String(saved),
           new_only: String(newOnly),
+          ignored: String(ignoredOnly),
           offset: String(offset),
           limit: "60",
         });
         if (filter) params.set("competitor_id", filter);
         const r = await api<{ items: Ad[]; total: number }>("/ads?" + params);
         if (requestId !== sequence.current) return;
+        if (offset > 0 && offset >= r.total) {
+          setOffset(Math.max(0, Math.ceil(r.total / 60) - 1) * 60);
+          return;
+        }
         setAds(r.items);
         setTotal(r.total);
       }
@@ -276,7 +287,7 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
     } finally {
       if (requestId === sequence.current) setLoading(false);
     }
-  }, [tab, search, saved, newOnly, filter, offset]);
+  }, [tab, search, saved, newOnly, ignoredOnly, filter, offset]);
   useEffect(() => {
     setLoading(true);
     void load();
@@ -314,6 +325,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
     setDetail(ad);
     setNote(ad.notes);
   };
+  const toggleIgnored = (ad: Ad) =>
+    act(async () => {
+      await api("/ads/" + ad.id, "PATCH", { ignored: !ad.ignored });
+      setDetail((current) => (current?.id === ad.id ? null : current));
+    });
   const groups = new Map<string, Ad[]>();
   for (const ad of ads) {
     const key = group ? ad.creative_key : String(ad.id);
@@ -528,11 +544,13 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
               <section className="gallery-header">
                 <div>
                   <h2>
-                    Competitor ads <span>{total}</span>
+                    {ignoredOnly ? "Ignored ads" : "Competitor ads"}{" "}
+                    <span>{total}</span>
                   </h2>
                   <small>
-                    “New” means first observed by your monitor. It may have
-                    launched earlier.
+                    {ignoredOnly
+                      ? "Ignored ads are hidden from your library. Restore any ad to show it again."
+                      : "“New” means first observed by your monitor. It may have launched earlier. Ignored ads are hidden."}
                   </small>
                 </div>
                 <a className="button subtle" href="/api/export.csv">
@@ -573,6 +591,13 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                   <Bookmark size={15} /> Saved
                 </button>
                 <button
+                  className={ignoredOnly ? "selected" : ""}
+                  aria-pressed={ignoredOnly}
+                  onClick={() => setIgnoredOnly(!ignoredOnly)}
+                >
+                  <EyeOff size={15} /> Ignored ads
+                </button>
+                <button
                   className={group ? "selected" : ""}
                   onClick={() => setGroup(!group)}
                 >
@@ -582,14 +607,18 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
               {!ads.length ? (
                 <Empty
                   title={
-                    competitors.length
-                      ? "No ads in this view yet"
-                      : "Your radar starts here"
+                    ignoredOnly
+                      ? "No ignored ads in this view"
+                      : competitors.length
+                        ? "No ads in this view yet"
+                        : "Your radar starts here"
                   }
                   description={
-                    competitors.length
-                      ? "The first successful scan will populate your library. Try clearing filters or check Scan history."
-                      : "Add a competitor’s Ad Library link to build your first baseline. Future scans will highlight newly observed ads."
+                    ignoredOnly
+                      ? "Ads you ignore will appear here. Try clearing other filters if an ignored ad is missing."
+                      : competitors.length
+                        ? "Try clearing filters, check Ignored ads, or check Scan history for your first successful scan."
+                        : "Add a competitor’s Ad Library link to build your first baseline. Future scans will highlight newly observed ads."
                   }
                   action={
                     !competitors.length && (
@@ -636,6 +665,23 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                               size={18}
                               fill={ad.saved ? "currentColor" : "none"}
                             />
+                          </button>
+                          <button
+                            className="icon-button"
+                            aria-label={ad.ignored ? "Restore ad" : "Ignore ad"}
+                            title={
+                              ad.ignored
+                                ? "Restore ad to library"
+                                : "Ignore ad (hide from library)"
+                            }
+                            disabled={busy}
+                            onClick={() => void toggleIgnored(ad)}
+                          >
+                            {ad.ignored ? (
+                              <Eye size={18} />
+                            ) : (
+                              <EyeOff size={18} />
+                            )}
                           </button>
                         </div>
                         <button className="creative" onClick={() => showAd(ad)}>
@@ -1326,6 +1372,13 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
               </div>
             )}
             <div className="detail-links">
+              <button
+                disabled={busy}
+                onClick={() => void toggleIgnored(detail)}
+              >
+                {detail.ignored ? <Eye size={15} /> : <EyeOff size={15} />}
+                {detail.ignored ? "Restore ad" : "Ignore ad"}
+              </button>
               <a
                 className="button primary"
                 href={safeLink(detail.data.ad_details_url)}

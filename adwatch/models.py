@@ -79,6 +79,12 @@ class Ad(Base):
     __table_args__ = (UniqueConstraint("competitor_id", "library_id"),)
 
 
+class IgnoredAd(Base):
+    __tablename__ = "ignored_ads"
+    # A separate table can be added to existing installations without altering ads.
+    ad_id: Mapped[int] = mapped_column(ForeignKey("ads.id", ondelete="CASCADE"), primary_key=True)
+
+
 class Alert(Base):
     __tablename__ = "alerts"
     id: Mapped[int] = mapped_column(primary_key=True)

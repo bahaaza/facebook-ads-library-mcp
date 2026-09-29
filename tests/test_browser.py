@@ -162,6 +162,28 @@ def test_dashboard_workflows_and_mobile(tmp_path):
             expect(page.get_by_role("dialog")).to_have_count(0)
             page.get_by_placeholder("Search copy, headlines, destinations…").fill("personalized")
             page.get_by_role("heading", name="Custom keychains", exact=True).wait_for()
+            # Save through the real API after the earlier mocked dialog-race check.
+            page.get_by_role("button", name="Details", exact=True).click()
+            page.get_by_label("Your notes", exact=True).fill("Try an event bundle offer")
+            page.get_by_role("button", name="Save notes", exact=True).click()
+            expect(page.get_by_role("button", name="Save notes", exact=True)).to_be_enabled()
+            page.get_by_role("button", name="Close", exact=True).click()
+            page.get_by_role("button", name="Ignore ad", exact=True).click()
+            page.get_by_role("heading", name="No ads in this view yet").wait_for()
+            page.reload()
+            page.get_by_role("heading", name="No ads in this view yet").wait_for()
+            page.get_by_role("button", name="Ignored ads", exact=True).click()
+            page.get_by_role("heading", name="Custom keychains", exact=True).wait_for()
+            page.get_by_role("button", name="Details", exact=True).click()
+            expect(page.get_by_role("textbox", name="Your notes", exact=True)).to_have_value(
+                "Try an event bundle offer"
+            )
+            page.get_by_role("dialog").get_by_role("button", name="Restore ad", exact=True).click()
+            expect(page.get_by_role("dialog")).to_have_count(0)
+            page.get_by_role("heading", name="No ignored ads in this view").wait_for()
+            page.get_by_role("button", name="Ignored ads", exact=True).click()
+            page.get_by_role("heading", name="Custom keychains", exact=True).wait_for()
+            page.get_by_role("button", name="Unsave ad", exact=True).wait_for()
             page.get_by_role("button", name="Settings & delivery", exact=True).click()
             page.get_by_role("heading", name="Alert delivery", exact=True).wait_for()
             mail_button = page.get_by_role("button", name="Send test email", exact=True)
@@ -210,6 +232,29 @@ def test_dashboard_workflows_and_mobile(tmp_path):
             page.set_viewport_size({"width": 1440, "height": 1000})
             if os.getenv("SCREENSHOT_PATH"):
                 page.screenshot(path=os.environ["SCREENSHOT_PATH"], full_page=True)
+            # Ignoring the only ad on the last page should return to a populated page.
+            with session.begin() as db:
+                for index in range(60):
+                    data = {
+                        "body": "Additional fixture",
+                        "link_text": f"Additional ad {index}",
+                        "ad_details_url": f"https://www.facebook.com/ads/library/?id={1000 + index}",
+                    }
+                    db.add(
+                        Ad(
+                            competitor_id=1,
+                            library_id=str(1000 + index),
+                            data=data,
+                            creative_key=creative_key(data),
+                        )
+                    )
+            page.get_by_role("button", name="Refresh dashboard", exact=True).click()
+            page.get_by_role("button", name="Next", exact=True).click()
+            page.get_by_text("61–61 of 61", exact=True).wait_for()
+            expect(page.locator(".ad-card")).to_have_count(1)
+            page.get_by_role("button", name="Ignore ad", exact=True).click()
+            expect(page.locator(".ad-card")).to_have_count(60)
+            expect(page.get_by_role("button", name="Next", exact=True)).to_have_count(0)
             page.get_by_role("button", name="Sign out", exact=True).click()
             page.get_by_role("heading", name="Sign in to Adwatch", exact=True).wait_for()
             page.reload()

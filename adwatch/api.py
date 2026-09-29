@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from adwatch.config import settings
 from adwatch.db import Session, init_db, now
-from adwatch.models import Ad, Alert, Competitor, Delivery, Scan, WorkerState
+from adwatch.models import Ad, Alert, Competitor, Delivery, IgnoredAd, Scan, WorkerState
 from adwatch.notifications import send_test_email
 from adwatch.scraper import build_url, page_id_from_source
 from adwatch.service import enqueue
@@ -172,6 +172,7 @@ class CompetitorPatch(BaseModel):
 
 class AdPatch(BaseModel):
     saved: bool | None = None
+    ignored: bool | None = None
     notes: str | None = Field(default=None, max_length=5000)
 
 
@@ -346,11 +347,17 @@ def ads(
     q: str = "",
     saved: bool = False,
     new_only: bool = False,
+    ignored: bool = False,
     limit: int = Query(60, ge=1, le=200),
     offset: int = Query(0, ge=0),
     session=Depends(db),
 ):
-    query = select(Ad).order_by(Ad.first_seen.desc(), Ad.id.desc())
+    query = (
+        select(Ad)
+        .outerjoin(IgnoredAd, IgnoredAd.ad_id == Ad.id)
+        .where(IgnoredAd.ad_id.is_not(None) if ignored else IgnoredAd.ad_id.is_(None))
+        .order_by(Ad.first_seen.desc(), Ad.id.desc())
+    )
     if competitor_id:
         query = query.where(Ad.competitor_id == competitor_id)
     if saved:
@@ -372,7 +379,7 @@ def ads(
     return {
         "total": total,
         "items": [
-            {**serialize(ad), "competitor_name": names.get(ad.competitor_id)}
+            {**serialize(ad), "ignored": ignored, "competitor_name": names.get(ad.competitor_id)}
             for ad in session.scalars(query.offset(offset).limit(limit))
         ],
     }
@@ -384,10 +391,24 @@ def update_ad(item_id: int, data: AdPatch, session=Depends(db)):
     values = data.model_dump(exclude_unset=True)
     if any(v is None for v in values.values()):
         raise HTTPException(422, "Fields cannot be null")
+    if "ignored" in values:
+        ignored = values.pop("ignored")
+        marker = session.get(IgnoredAd, item_id)
+        if ignored and marker is None:
+            try:
+                with session.begin_nested():
+                    session.add(IgnoredAd(ad_id=item_id))
+                    session.flush()
+            except IntegrityError:
+                # Repeated concurrent ignore requests are also idempotent.
+                if session.get(IgnoredAd, item_id) is None:
+                    raise
+        elif not ignored and marker is not None:
+            session.delete(marker)
     for key, value in values.items():
         setattr(item, key, value)
     session.commit()
-    return serialize(item)
+    return {**serialize(item), "ignored": session.get(IgnoredAd, item_id) is not None}
 
 
 @app.get("/api/alerts", dependencies=[Depends(auth)])
@@ -460,6 +481,7 @@ def export(session=Depends(db)):
             "ad_url",
             "saved",
             "notes",
+            "ignored",
         ]
     )
     names = {c.id: c.name for c in session.scalars(select(Competitor))}
@@ -468,7 +490,11 @@ def export(session=Depends(db)):
         value = str(value or "")
         return "'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
-    for ad in session.scalars(select(Ad).order_by(Ad.id)):
+    for ad, ignored in session.execute(
+        select(Ad, IgnoredAd.ad_id.is_not(None))
+        .outerjoin(IgnoredAd, IgnoredAd.ad_id == Ad.id)
+        .order_by(Ad.id)
+    ):
         writer.writerow(
             [
                 safe(value)
@@ -484,6 +510,7 @@ def export(session=Depends(db)):
                     ad.data.get("ad_details_url"),
                     ad.saved,
                     ad.notes,
+                    ignored,
                 ]
             ]
         )

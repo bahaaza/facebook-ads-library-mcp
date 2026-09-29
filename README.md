@@ -11,6 +11,7 @@ Forked from [RamsesAguirre777/facebook-ads-library-mcp](https://github.com/Ramse
 - Build a quiet first baseline, then receive alerts for newly observed ad IDs.
 - Browse collected copy, creative thumbnails, public creative variants, launch dates, and destination links.
 - Search copy (including Arabic and Hebrew), filter by competitor, save examples, write notes, group similar copy, and export CSV.
+- Ignore individual ads to hide them from the gallery, including saved and new-ad views. Use **Ignored ads** to find and restore them. Choices survive future scans; history and notes remain in the CSV export with an `ignored` column.
 - Inspect every scan, its coverage warning, and the rendered text used as evidence.
 - Read alerts in the dashboard; optionally deliver them through email and/or Telegram.
 - Pause monitoring without losing history. Failed scans preserve all collected ads.
@@ -102,7 +103,7 @@ New ads are bundled into one event per competitor scan. The first consecutive sc
 
 The worker waits at least 30 seconds between browser scans by default, adds schedule jitter, and backs off unreadable Pages for 2, 4, 8, 16, then up to 24 hours. A full render has a 180-second timeout and bounded scrolling. A crashed running scan is recovered after its 10-minute lease expires. Paused queued scans are cancelled; an already running scan may finish.
 
-The initial schema is created automatically on startup. This is the first schema version; future schema changes need an explicit migration rather than deleting the database.
+The initial schema is created automatically on startup, including an additive `ignored_ads` table for persistent gallery preferences on existing installations. Future changes to existing tables need an explicit migration rather than deleting the database.
 
 ### What the data means
 

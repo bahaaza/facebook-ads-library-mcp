@@ -1,3 +1,6 @@
+import csv
+import io
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -5,8 +8,8 @@ from sqlalchemy.orm import sessionmaker
 import adwatch.api as api
 from adwatch.config import settings
 from adwatch.db import Base, make_engine
-from adwatch.models import Ad, Scan
-from adwatch.service import creative_key
+from adwatch.models import Ad, IgnoredAd, Scan
+from adwatch.service import creative_key, enqueue, finish_scan
 
 
 @pytest.fixture
@@ -129,6 +132,74 @@ def test_ad_search_notes_and_csv_formula_escape(client):
         scan_id = scan.id
     evidence = client.get(f"/api/scans/{scan_id}/evidence")
     assert evidence.headers["content-type"].startswith("text/plain")
+
+
+def test_ignore_restore_filters_export_and_rescan(client):
+    competitor_id = add(client).json()["id"]
+    with client.factory.begin() as session:
+        for library_id in ("111", "222", "333"):
+            data = {"library_id": library_id, "body": "Personalized gifts"}
+            session.add(
+                Ad(
+                    competitor_id=competitor_id,
+                    library_id=library_id,
+                    data=data,
+                    creative_key=creative_key(data),
+                    baseline=False,
+                )
+            )
+    original = client.get("/api/ads").json()
+    ad = original["items"][0]
+    ad_id = ad["id"]
+    assert not ad["ignored"]
+    path = f"/api/ads/{ad_id}"
+    for _ in range(2):
+        response = client.patch(
+            path, json={"ignored": True, "saved": True, "notes": "Keep this history"}
+        )
+        assert response.status_code == 200
+        assert response.json()["ignored"]
+    for params in ({}, {"q": "gifts", "new_only": True}, {"limit": 1, "offset": 1}):
+        visible = client.get("/api/ads", params=params).json()
+        assert visible["total"] == 2
+        assert all(item["id"] != ad_id for item in visible["items"])
+    assert client.get("/api/ads?saved=true").json()["total"] == 0
+    ignored = client.get(
+        "/api/ads",
+        params={"ignored": True, "saved": True, "competitor_id": competitor_id, "q": "gifts"},
+    ).json()
+    assert ignored["total"] == 1
+    assert ignored["items"][0]["id"] == ad_id
+    assert ignored["items"][0]["ignored"]
+    assert client.get("/api/ads?ignored=true&q=missing").json()["total"] == 0
+    exported = list(csv.DictReader(io.StringIO(client.get("/api/export.csv").text)))
+    assert len(exported) == 3
+    exported_ad = next(row for row in exported if row["library_id"] == ad["library_id"])
+    assert exported_ad["ignored"] == "True"
+    assert exported_ad["notes"] == "Keep this history"
+    assert client.patch(path, json={"ignored": None}).status_code == 422
+    assert client.patch("/api/ads/99999", json={"ignored": True}).status_code == 404
+    assert client.patch(path, json={"ignored": False}, auth=("wrong", "wrong")).status_code == 401
+    # A fresh session and a future scan preserve the user's choice and notes.
+    with client.factory.begin() as session:
+        finish_scan(
+            session,
+            enqueue(session, competitor_id),
+            {"success": True, "ads": [{"library_id": ad["library_id"], "body": "Updated gifts"}]},
+        )
+    assert client.get("/api/ads").json()["total"] == 2
+    updated = client.get("/api/ads?ignored=true").json()["items"][0]
+    assert updated["data"]["body"] == "Updated gifts"
+    assert updated["notes"] == "Keep this history"
+    for _ in range(2):
+        assert not client.patch(path, json={"ignored": False}).json()["ignored"]
+    assert client.get("/api/ads").json()["total"] == 3
+    assert client.get("/api/ads?ignored=true").json()["total"] == 0
+    assert client.get("/api/ads?saved=true").json()["items"][0]["notes"] == "Keep this history"
+    client.patch(path, json={"ignored": True})
+    assert client.delete(f"/api/competitors/{competitor_id}").status_code == 204
+    with client.factory() as session:
+        assert session.query(IgnoredAd).count() == 0
 
 
 def test_search_decoded_arabic_and_hebrew(client):
