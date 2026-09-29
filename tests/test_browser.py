@@ -143,10 +143,18 @@ def test_dashboard_workflows_and_mobile(tmp_path):
             page.get_by_role("button", name="Unsave ad", exact=True).wait_for()
             page.get_by_role("button", name="Details", exact=True).click()
             page.get_by_label("Your notes", exact=True).fill("Try an event bundle offer")
+            # Hold the save response until after Close to reproduce the dialog race.
+            pending_saves = []
+            page.route("**/api/ads/*", lambda route: pending_saves.append(route))
             page.get_by_role("button", name="Save notes", exact=True).click()
             page.get_by_role("button", name="Close", exact=True).click()
+            expect(page.get_by_role("dialog")).to_have_count(0)
+            assert len(pending_saves) == 1
+            pending_saves[0].fulfill(response=pending_saves[0].fetch())
+            page.unroute("**/api/ads/*")
             page.get_by_placeholder("Search copy, headlines, destinations…").fill("not-present")
             page.get_by_role("heading", name="No ads in this view yet").wait_for()
+            expect(page.get_by_role("dialog")).to_have_count(0)
             page.get_by_placeholder("Search copy, headlines, destinations…").fill("personalized")
             page.get_by_role("heading", name="Custom keychains", exact=True).wait_for()
             page.get_by_role("button", name="Settings & delivery", exact=True).click()

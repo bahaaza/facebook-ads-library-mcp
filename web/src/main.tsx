@@ -1360,7 +1360,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
               onClick={() =>
                 void act(async () => {
                   await api("/ads/" + detail.id, "PATCH", { notes: note });
-                  setDetail({ ...detail, notes: note });
+                  setDetail((current) =>
+                    current?.id === detail.id
+                      ? { ...current, notes: note }
+                      : current,
+                  );
                 })
               }
             >
