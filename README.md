@@ -27,7 +27,7 @@ git switch feat/competitor-monitor
 ./scripts/setup.sh
 ```
 
-Open **http://localhost:8000**. Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the generated `.env` file. Setup generates two independent random passwords and leaves an existing `.env` intact. Never commit that file.
+Open **http://localhost:18473**. Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the generated `.env` file. Setup generates two independent random passwords and leaves an existing `.env` intact. Never commit that file.
 
 On Windows, run the script in WSL or create `.env` from `.env.example`, replace both passwords (use hexadecimal characters for the database password), then run:
 
@@ -46,7 +46,7 @@ docker compose down                   # Stop; retain history
 docker compose up -d --wait            # Resume
 ```
 
-Changing `PORT` also requires changing `PUBLIC_URL`. If port 8000 is already used, set both in `.env` before starting. Do not use `down -v` unless you intend to delete the database volume.
+Changing `PORT` also requires changing `PUBLIC_URL`. If port 18473 is already used, set both in `.env` before starting. Do not use `down -v` unless you intend to delete the database volume.
 
 ## Build your first watchlist
 
@@ -158,7 +158,7 @@ cd web && npm ci && npm run build && cd ..
 # Set a strong ADMIN_PASSWORD before starting locally.
 # Local development defaults to SQLite in work/; run exactly one local worker.
 mkdir -p work
-uv run uvicorn adwatch.api:app --host 127.0.0.1 --port 8000
+uv run uvicorn adwatch.api:app --host 127.0.0.1 --port 18473
 # In another terminal:
 uv run python -m adwatch.worker
 ```

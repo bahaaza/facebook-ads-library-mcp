@@ -12,4 +12,6 @@ if [ ! -f .env ]; then
   printf 'Created .env with random passwords. Your login is ADMIN_USERNAME / ADMIN_PASSWORD in that file.\n'
 fi
 docker compose up --build -d --wait --wait-timeout 300
-printf 'Adwatch is ready at http://localhost:8000 (or the PORT in .env).\n'
+bound_address=$(docker compose port api 8000)
+bound_port=${bound_address##*:}
+printf 'Adwatch is ready at http://localhost:%s\n' "$bound_port"

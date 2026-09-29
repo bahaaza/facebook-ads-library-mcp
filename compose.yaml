@@ -32,7 +32,7 @@ services:
       DATABASE_URL: postgresql+psycopg://adwatch:${POSTGRES_PASSWORD:?Run scripts/setup.sh first}@db:5432/adwatch
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run scripts/setup.sh first}
     ports:
-      - "127.0.0.1:${PORT:-8000}:8000"
+      - "127.0.0.1:${PORT:-18473}:8000"
     depends_on:
       db:
         condition: service_healthy

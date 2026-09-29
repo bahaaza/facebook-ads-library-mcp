@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./work/adwatch.db"
     admin_username: str = "admin"
     admin_password: str = ""
-    public_url: str = "http://localhost:8000"
+    public_url: str = "http://localhost:18473"
     scan_gap_seconds: int = Field(default=30, ge=0, le=3600)
     poll_seconds: int = Field(default=5, ge=1, le=60)
     smtp_host: str = ""
