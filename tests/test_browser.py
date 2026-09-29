@@ -258,3 +258,48 @@ def test_exact_page_scan_uses_public_response_identity(monkeypatch):
     assert result["ads"][0]["page_id"] == "123"
     assert result["excluded_unverified"] == 1
     assert result["partial"]
+
+
+@pytest.mark.parametrize("returned_page_id,expected_success", [("123", True), ("999", False)])
+def test_http403_empty_page_requires_matching_public_data(
+    monkeypatch, returned_page_id, expected_success
+):
+    import json
+
+    from adwatch.scraper import build_url, render
+
+    original = Browser.new_context
+    data = {
+        "data": {
+            "page": {"id": returned_page_id},
+            "ad_library_main": {
+                "search_results_connection": {
+                    "count": 0,
+                    "edges": [],
+                    "page_info": {"has_next_page": False},
+                }
+            },
+        },
+        "variables": {"viewAllPageID": returned_page_id},
+    }
+    html = (
+        "<html><body><p>No ads match your search criteria</p>"
+        '<img src="/images/ads/politics/archive/empty-state_overfiltering_3x.png">'
+        '<script type="application/json">' + json.dumps(data) + "</script></body></html>"
+    )
+
+    async def context(self, **kwargs):
+        ctx = await original(self, **kwargs)
+        await ctx.route(
+            "**/*", lambda route: route.fulfill(status=403, content_type="text/html", body=html)
+        )
+        return ctx
+
+    monkeypatch.setattr(Browser, "new_context", context)
+    result = asyncio.run(render(build_url(page_id="123"), 3, 0))
+    assert result["success"] is expected_success
+    assert result["status_code"] == 403
+    assert result["ads"] == []
+    if expected_success:
+        assert result["outcome"] == "empty"
+        assert not result["partial"]

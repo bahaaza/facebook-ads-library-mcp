@@ -106,3 +106,13 @@ def test_later_snapshot_enriches_without_erasing_fields():
 
 def test_empty_result_must_be_ui_evidence_not_a_phrase_in_copy():
     assert not classify("Our product prevents the dreaded No results found error.", 200)["success"]
+
+
+def test_http_403_empty_result_needs_verified_application_data():
+    text = "No ads match your search criteria"
+    assert not classify(text, 403)["success"]
+    assert classify(text, 403, verified_empty=True)["outcome"] == "empty"
+    assert not classify(text, 401, verified_empty=True)["success"]
+    assert not classify(text, 429, verified_empty=True)["success"]
+    assert not classify(text + "\nLog in to continue", 403, verified_empty=True)["success"]
+    assert not classify("Loading", 403, verified_empty=True)["success"]

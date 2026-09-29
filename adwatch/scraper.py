@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify
 
 from adwatch.parser import _parse_ad_library_markdown
-from adwatch.public_data import combine, from_soup, parse_payload
+from adwatch.public_data import combine, from_soup, parse_payload, verified_empty_from_soup
 
 BASE = "https://www.facebook.com/ads/library/"
 
@@ -81,7 +81,12 @@ def page_id_from_source(source: str) -> str:
     return page_id
 
 
-def classify(markdown: str, status_code: int | None, truncated: bool = False) -> dict:
+def classify(
+    markdown: str,
+    status_code: int | None,
+    truncated: bool = False,
+    verified_empty: bool = False,
+) -> dict:
     ads = _parse_ad_library_markdown(markdown)
     if ads:
         return dict(success=True, outcome="ok", ads=ads, partial=truncated)
@@ -96,14 +101,21 @@ def classify(markdown: str, status_code: int | None, truncated: bool = False) ->
         markdown,
         re.IGNORECASE,
     )
-    if no_results and not blocked and status_code not in (401, 403, 429):
+    status_allows_empty = status_code not in (401, 403, 429) or (
+        status_code == 403 and verified_empty
+    )
+    if no_results and not blocked and status_allows_empty:
         return dict(success=True, outcome="empty", ads=[], partial=False)
     return dict(
         success=False,
         outcome="unavailable",
         ads=[],
         partial=False,
-        error="Ad Library could not be read. It may be blocked, still loading, or its layout changed.",
+        error=(
+            "Ad Library could not be read"
+            + (f" (HTTP {status_code})" if status_code is not None else "")
+            + ". It may be blocked, still loading, or its layout changed."
+        ),
     )
 
 
@@ -111,6 +123,7 @@ async def render(url: str, wait_seconds: int = 8, scroll_rounds: int = 8) -> dic
     validate_library_url(url)
     if not 0 <= scroll_rounds <= 30 or not 3 <= wait_seconds <= 30:
         raise ValueError("wait_seconds must be 3–30 and scroll_rounds 0–30.")
+    requested_page = parse_qs(urlparse(url).query).get("view_all_page_id", [""])[0]
     from playwright.async_api import async_playwright
 
     async with asyncio.timeout(180):
@@ -152,18 +165,33 @@ async def render(url: str, wait_seconds: int = 8, scroll_rounds: int = 8) -> dic
                 stable = 0
                 previous = ""
                 snapshots = []
+                verified_empty = False
 
                 # Collect every viewport: virtualized lists can remove earlier cards.
                 async def snapshot():
+                    nonlocal verified_empty
                     html = await page.content()
                     soup = BeautifulSoup(html, "html.parser")
+                    text = await page.locator("body").inner_text()
+                    verified_empty = (
+                        parse_qs(urlparse(page.url).query).get("view_all_page_id", [""])[0]
+                        == requested_page
+                        and verified_empty_from_soup(soup, requested_page)
+                        and bool(
+                            re.search(
+                                r"^\s*No ads match your search criteria\.?\s*$",
+                                text,
+                                re.IGNORECASE | re.MULTILINE,
+                            )
+                        )
+                    )
                     for ad in from_soup(soup):
                         structured.setdefault(ad["library_id"], ad)
                     for hidden in soup(["script", "style", "noscript", "head"]):
                         hidden.decompose()
                     md = markdownify(str(soup), heading_style="ATX")
                     snapshots.append(md)
-                    return await page.locator("body").inner_text()
+                    return text
 
                 previous = await snapshot()
                 for _ in range(scroll_rounds):
@@ -178,8 +206,7 @@ async def render(url: str, wait_seconds: int = 8, scroll_rounds: int = 8) -> dic
                     await asyncio.gather(*captures)
                 md = "\n\n".join(snapshots)
                 status = response.status if response else None
-                outcome = classify(md, status, truncated=stable < 2)
-                requested_page = parse_qs(urlparse(url).query).get("view_all_page_id", [""])[0]
+                outcome = classify(md, status, truncated=stable < 2, verified_empty=verified_empty)
                 records, excluded = combine(outcome["ads"], structured, requested_page)
                 if records:
                     outcome = dict(

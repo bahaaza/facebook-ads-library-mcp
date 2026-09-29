@@ -117,6 +117,60 @@ def from_soup(soup: BeautifulSoup) -> list[dict]:
     return result
 
 
+def verified_empty_from_soup(soup: BeautifulSoup, page_id: str) -> bool:
+    """Corroborate the rendered empty UI with a completed exact-Page search.
+
+    Meta sometimes serves the functioning public app with an initial HTTP 403.
+    Require its Page identity, query identity, and explicit final zero-result data;
+    generic empty text in a blocked shell is not enough.
+    """
+    if not page_id or not any(
+        urlparse(image.get("src", "")).path
+        == "/images/ads/politics/archive/empty-state_overfiltering_3x.png"
+        for image in soup.find_all("img")
+    ):
+        return False
+    page_matches = query_matches = False
+    connections = []
+    for script in soup.find_all("script", attrs={"type": "application/json"}):
+        try:
+            stack = [json.loads(script.string or script.get_text())]
+        except (ValueError, TypeError):
+            continue
+        while stack:
+            item = stack.pop()
+            if isinstance(item, list):
+                stack.extend(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            if item.get("errors") or item.get("error"):
+                return False
+            if str(item.get("viewAllPageID", "")) == page_id:
+                query_matches = True
+            page = item.get("page")
+            if isinstance(page, dict) and str(page.get("id", "")) == page_id:
+                page_matches = True
+            main = item.get("ad_library_main")
+            if isinstance(main, dict) and "search_results_connection" in main:
+                connections.append(main["search_results_connection"])
+            stack.extend(value for value in item.values() if isinstance(value, (dict, list)))
+    return (
+        page_matches
+        and query_matches
+        and bool(connections)
+        and all(
+            isinstance(connection, dict)
+            and type(connection.get("count")) is int
+            and connection["count"] == 0
+            and connection.get("edges") == []
+            and isinstance(connection.get("page_info"), dict)
+            and connection["page_info"].get("has_next_page") is False
+            for connection in connections
+        )
+    )
+
+
 def combine(
     markdown_records: list[dict], structured: dict[str, dict], page_id: str = ""
 ) -> tuple[list[dict], int]:
