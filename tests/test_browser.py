@@ -150,8 +150,13 @@ def test_dashboard_workflows_and_mobile(tmp_path):
             page.get_by_role("button", name="Close", exact=True).click()
             expect(page.get_by_role("dialog")).to_have_count(0)
             assert len(pending_saves) == 1
-            pending_saves[0].fulfill(response=pending_saves[0].fetch())
+            with page.expect_response(
+                lambda response: response.request.method == "PATCH" and "/api/ads/" in response.url
+            ) as saved_response:
+                pending_saves[0].fulfill(json={"id": 1, "notes": "Try an event bundle offer"})
+            saved_response.value.finished()
             page.unroute("**/api/ads/*")
+            expect(page.get_by_role("button", name="Sign out", exact=True)).to_be_enabled()
             page.get_by_placeholder("Search copy, headlines, destinations…").fill("not-present")
             page.get_by_role("heading", name="No ads in this view yet").wait_for()
             expect(page.get_by_role("dialog")).to_have_count(0)
