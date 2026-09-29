@@ -14,6 +14,7 @@ import {
   Eye,
   LayoutGrid,
   LoaderCircle,
+  LogOut,
   Pause,
   Play,
   Plus,
@@ -123,17 +124,27 @@ const tabs: { id: Tab; label: string; icon: typeof Eye }[] = [
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "scans", label: "Scan history", icon: Activity },
 ];
+let authGeneration = 0;
 async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  notifyUnauthorized = true,
 ): Promise<T> {
+  const generation = authGeneration;
   const response = await fetch("/api" + path, {
     method,
     headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {
+    if (
+      response.status === 401 &&
+      notifyUnauthorized &&
+      generation === authGeneration
+    ) {
+      window.dispatchEvent(new Event("adwatch:unauthorized"));
+    }
     const result = await response
       .json()
       .catch(() => ({ detail: "Request failed" }));
@@ -180,7 +191,7 @@ function Empty({
     </div>
   );
 }
-function App() {
+function App({ onLogout }: { onLogout: () => Promise<void> }) {
   const initial = new URLSearchParams(location.search).get("tab") as Tab;
   const [tab, setTab] = useState<Tab>(
     ["ads", "competitors", "alerts", "scans", "settings"].includes(initial)
@@ -372,6 +383,22 @@ function App() {
             onClick={() => go("settings")}
           >
             <Settings2 size={18} /> Settings & delivery
+          </button>
+          <button
+            className="settings-link"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onLogout();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <LogOut size={18} /> Sign out
           </button>
         </div>
       </aside>
@@ -1366,8 +1393,115 @@ function App() {
     </div>
   );
 }
+function SignIn() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const expired = () => {
+      authGeneration++;
+      setAuthenticated(false);
+    };
+    window.addEventListener("adwatch:unauthorized", expired);
+    api<{ authenticated: boolean }>("/session", "GET", undefined, false)
+      .then(() => {
+        if (active) setAuthenticated(true);
+      })
+      .catch((e: Error) => {
+        if (!active) return;
+        setAuthenticated(false);
+        if (e.message !== "Sign in to Adwatch") setError(e.message);
+      });
+    return () => {
+      active = false;
+      window.removeEventListener("adwatch:unauthorized", expired);
+    };
+  }, []);
+
+  const logout = async () => {
+    await api("/session", "DELETE");
+    authGeneration++;
+    setPassword("");
+    setAuthenticated(false);
+  };
+  if (authenticated) return <App onLogout={logout} />;
+
+  return (
+    <main className="login-page">
+      <section className="login-card">
+        <div className="brand">
+          <span className="brand-mark">
+            <Radar size={24} />
+          </span>
+          adwatch<span className="brand-dot">.</span>
+        </div>
+        {authenticated === null ? (
+          <p role="status">Checking your session…</p>
+        ) : (
+          <>
+            <h1>Sign in to Adwatch</h1>
+            <p>Keep an eye on your competitors’ next move.</p>
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setBusy(true);
+                setError("");
+                try {
+                  await api("/session", "POST", { username, password }, false);
+                  authGeneration++;
+                  setPassword("");
+                  setAuthenticated(true);
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <label>
+                Username
+                <input
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </label>
+              {error && (
+                <p className="login-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <button className="primary full" disabled={busy}>
+                {busy ? "Signing in…" : "Sign in"}
+              </button>
+            </form>
+            <p className="hint">
+              Use the login credentials in your installation’s .env file.
+            </p>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <SignIn />
   </React.StrictMode>,
 );

@@ -140,3 +140,75 @@ def test_search_decoded_arabic_and_hebrew(client):
         )
     assert client.get("/api/ads", params={"q": "هدايا"}).json()["total"] == 1
     assert client.get("/api/ads", params={"q": "מתנות"}).json()["total"] == 1
+
+
+def test_anonymous_entry_and_form_session(client, tmp_path, monkeypatch):
+    (tmp_path / "index.html").write_text('<div id="root"></div>')
+    monkeypatch.setattr(api, "STATIC", tmp_path)
+    client.auth = None
+    response = client.get("/")
+    assert response.status_code == 200
+    assert 'id="root"' in response.text
+    assert client.get("/api/overview").status_code == 401
+    assert "www-authenticate" not in client.get("/api/session").headers
+    wrong = client.post("/api/session", json={"username": "admin", "password": "wrong"})
+    assert wrong.status_code == 401
+    assert wrong.json()["detail"] == "Incorrect username or password"
+    assert api.SESSION_COOKIE not in client.cookies
+    response = client.post(
+        "/api/session", json={"username": "admin", "password": "testing-password"}
+    )
+    assert response.status_code == 204
+    cookie = response.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Max-Age=28800" in cookie
+    assert "testing-password" not in cookie
+    assert client.get("/api/session").json() == {"authenticated": True}
+    assert client.get("/api/overview").status_code == 200
+    assert add(client).status_code == 201
+    assert client.get("/api/export.csv").status_code == 200
+    # Cookie sessions can perform same-origin writes but not cross-origin writes.
+    assert (
+        client.post(
+            "/api/session",
+            headers={"Origin": "https://evil.test"},
+            json={"username": "admin", "password": "testing-password"},
+        ).status_code
+        == 403
+    )
+    assert client.delete("/api/session", headers={"Origin": "https://evil.test"}).status_code == 403
+    assert client.delete("/api/session").status_code == 204
+    assert api.SESSION_COOKIE not in client.cookies
+    assert client.get("/api/overview").status_code == 401
+    assert client.get("/api/export.csv").status_code == 401
+
+
+def test_session_tampering_expiry_and_rotation(client, monkeypatch):
+    client.auth = None
+    monkeypatch.setattr(api.time, "time", lambda: 1000000)
+    response = client.post(
+        "/api/session", json={"username": "admin", "password": "testing-password"}
+    )
+    token = response.cookies[api.SESSION_COOKIE]
+    assert api.valid_session(token)
+    assert not api.valid_session(token + "x")
+    assert not api.valid_session("not.a.session")
+    assert not api.valid_session("999999999999." + "a" * 32 + ".invalid")
+    assert client.get("/api/overview", auth=("admin", "wrong")).status_code == 401
+    monkeypatch.setattr(api.time, "time", lambda: 1000000 + api.SESSION_SECONDS)
+    assert not api.valid_session(token)
+    assert client.get("/api/overview").status_code == 401
+    monkeypatch.setattr(api.time, "time", lambda: 1000000)
+    monkeypatch.setenv("ADMIN_PASSWORD", "rotated-password")
+    settings.cache_clear()
+    assert not api.valid_session(token)
+    assert client.get("/api/overview").status_code == 401
+
+
+def test_https_session_cookie_is_secure(client):
+    client.auth = None
+    response = client.post(
+        "https://testserver/api/session",
+        json={"username": "admin", "password": "testing-password"},
+    )
+    assert response.status_code == 204
+    assert "Secure" in response.headers["set-cookie"]

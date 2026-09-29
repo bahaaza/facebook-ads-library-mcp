@@ -93,12 +93,19 @@ def test_dashboard_workflows_and_mobile(tmp_path):
         errors = []
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            context = browser.new_context(
-                http_credentials={"username": "admin", "password": "browser-test"}
-            )
+            context = browser.new_context()
             page = context.new_page()
             page.on("pageerror", lambda exc: errors.append(str(exc)))
             page.goto(url)
+            page.get_by_role("heading", name="Sign in to Adwatch", exact=True).wait_for()
+            page.get_by_label("Username", exact=True).fill("admin")
+            page.get_by_label("Password", exact=True).fill("wrong-password")
+            page.get_by_role("button", name="Sign in", exact=True).click()
+            page.get_by_role("alert").get_by_text("Incorrect username or password").wait_for()
+            page.get_by_label("Password", exact=True).fill("browser-test")
+            page.get_by_role("button", name="Sign in", exact=True).click()
+            page.get_by_role("heading", name="Your radar starts here").wait_for()
+            page.reload()
             page.get_by_role("heading", name="Your radar starts here").wait_for()
             page.get_by_role("button", name="Add your first competitor").click()
             page.get_by_label("Competitor name", exact=True).fill("Print Studio")
@@ -151,6 +158,10 @@ def test_dashboard_workflows_and_mobile(tmp_path):
             page.set_viewport_size({"width": 1440, "height": 1000})
             if os.getenv("SCREENSHOT_PATH"):
                 page.screenshot(path=os.environ["SCREENSHOT_PATH"], full_page=True)
+            page.get_by_role("button", name="Sign out", exact=True).click()
+            page.get_by_role("heading", name="Sign in to Adwatch", exact=True).wait_for()
+            page.reload()
+            page.get_by_role("heading", name="Sign in to Adwatch", exact=True).wait_for()
             assert errors == []
             context.close()
             browser.close()

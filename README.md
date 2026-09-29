@@ -37,7 +37,7 @@ docker compose up --build -d --wait
 
 The dashboard, API, worker, Chromium, and PostgreSQL install together. PostgreSQL uses a persistent named volume. Containers restart automatically when Docker starts; scans require the host to remain awake. A laptop that sleeps cannot monitor continuously. A small always-on server is a useful eventual home.
 
-The default port binds to **127.0.0.1**, with HTTP Basic login. For remote use, put it behind an HTTPS reverse proxy or a private tunnel; set `PUBLIC_URL` to the actual HTTPS address. Do not expose plain HTTP Basic credentials on the public internet.
+The default port binds to **127.0.0.1**, with a sign-in form and an eight-hour HttpOnly session cookie (API clients can also use HTTP Basic). For remote use, put it behind an HTTPS reverse proxy or a private tunnel; set `PUBLIC_URL` to the actual HTTPS address. Use HTTPS for remote access to protect login credentials and session cookies.
 
 ```sh
 docker compose ps                     # API, DB, and worker should be healthy

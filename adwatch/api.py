@@ -1,6 +1,9 @@
 import csv
+import hashlib
+import hmac
 import io
 import secrets
+import time
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
@@ -23,19 +26,52 @@ from adwatch.service import enqueue
 security = HTTPBasic(auto_error=False)
 
 
-def auth(credentials: Annotated[HTTPBasicCredentials | None, Depends(security)]):
+SESSION_COOKIE = "adwatch_session"
+SESSION_SECONDS = 8 * 60 * 60
+
+
+def valid_credentials(username: str, password: str) -> bool:
     config = settings()
     if not config.admin_password:
         raise HTTPException(503, "Set ADMIN_PASSWORD before starting Adwatch.")
-    username = credentials.username if credentials else ""
-    password = credentials.password if credentials else ""
-    if not (
-        secrets.compare_digest(username.encode(), config.admin_username.encode())
-        and secrets.compare_digest(password.encode(), config.admin_password.encode())
-    ):
-        raise HTTPException(
-            401, "Sign in to Adwatch", headers={"WWW-Authenticate": 'Basic realm="Adwatch"'}
-        )
+    return secrets.compare_digest(username.encode(), config.admin_username.encode()) and (
+        secrets.compare_digest(password.encode(), config.admin_password.encode())
+    )
+
+
+def session_signature(payload: str) -> str:
+    config = settings()
+    # Credential changes invalidate existing sessions. Cookies contain no credentials.
+    key = (config.admin_username + "\0" + config.admin_password).encode()
+    return hmac.new(key, ("adwatch-session:" + payload).encode(), hashlib.sha256).hexdigest()
+
+
+def valid_session(token: str) -> bool:
+    if not settings().admin_password:
+        return False
+    try:
+        expires, nonce, signature = token.split(".")
+        remaining = int(expires) - int(time.time())
+        if not 0 < remaining <= SESSION_SECONDS or len(nonce) != 32:
+            return False
+        return secrets.compare_digest(signature, session_signature(expires + "." + nonce))
+    except (ValueError, TypeError):
+        return False
+
+
+def auth(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(security)],
+):
+    if not settings().admin_password:
+        raise HTTPException(503, "Set ADMIN_PASSWORD before starting Adwatch.")
+    if credentials:
+        if valid_credentials(credentials.username, credentials.password):
+            return
+    elif valid_session(request.cookies.get(SESSION_COOKIE, "")):
+        return
+    # An ordinary form handles sign-in; a Basic challenge can hide it in embedded browsers.
+    raise HTTPException(401, "Sign in to Adwatch")
 
 
 @asynccontextmanager
@@ -135,6 +171,41 @@ class CompetitorPatch(BaseModel):
 class AdPatch(BaseModel):
     saved: bool | None = None
     notes: str | None = Field(default=None, max_length=5000)
+
+
+class LoginInput(BaseModel):
+    username: str = Field(max_length=120)
+    password: str = Field(max_length=1000)
+
+
+@app.post("/api/session")
+def sign_in(data: LoginInput, request: Request):
+    if not valid_credentials(data.username, data.password):
+        raise HTTPException(401, "Incorrect username or password")
+    payload = str(int(time.time()) + SESSION_SECONDS) + "." + secrets.token_hex(16)
+    response = Response(status_code=204)
+    response.set_cookie(
+        SESSION_COOKIE,
+        payload + "." + session_signature(payload),
+        max_age=SESSION_SECONDS,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="strict",
+        path="/",
+    )
+    return response
+
+
+@app.get("/api/session", dependencies=[Depends(auth)])
+def session_status():
+    return {"authenticated": True}
+
+
+@app.delete("/api/session")
+def sign_out():
+    response = Response(status_code=204)
+    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="strict")
+    return response
 
 
 @app.get("/health")
@@ -406,7 +477,7 @@ if (STATIC / "assets").exists():
     app.mount("/assets", StaticFiles(directory=STATIC / "assets"), name="assets")
 
 
-@app.get("/", dependencies=[Depends(auth)])
+@app.get("/")
 def index():
     if not (STATIC / "index.html").exists():
         raise HTTPException(503, "Build the web UI first: cd web && npm ci && npm run build")
