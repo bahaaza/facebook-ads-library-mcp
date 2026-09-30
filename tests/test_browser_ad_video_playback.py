@@ -112,6 +112,19 @@ def video_server(tmp_path_factory):
                 {"creative_video": missing, "video_hd_url": missing, "video_sd_url": valid},
             ),
             ("Image only", {"creative_image": poster}),
+            (
+                "Mixed media",
+                {
+                    "creative_video": valid,
+                    "creative_videos": [valid, "https://video.xx.fbcdn.net/adwatch-fixture.webm"],
+                    "videos": [
+                        {"creative_video": valid},
+                        {"creative_video": "https://video.xx.fbcdn.net/adwatch-fixture.webm"},
+                    ],
+                    "creative_images": [poster, "https://image.xx.fbcdn.net/video-poster.svg"],
+                    "started_running": "Jan 5, 2026",
+                },
+            ),
         ]
         engine = make_engine(database_url)
         with sessionmaker(engine).begin() as db:
@@ -258,5 +271,27 @@ def test_video_failures_preview_safety_and_sd_fallback(video_page):
     )
     assert_playback(fallback_video)
     image = card(page, "Image only")
-    expect(image.get_by_role("img", name="Competitor ad creative")).to_be_visible()
+    expect(image.get_by_role("img", name="Image only", exact=True)).to_be_visible()
     expect(image.locator("video")).to_have_count(0)
+
+
+def test_mixed_media_keeps_all_videos_images_and_advertised_date(video_page):
+    page = video_page
+    mixed = card(page, "Mixed media")
+    expect(mixed.locator(".ad-date time")).to_have_attribute("datetime", "2026-01-05")
+    assert_playback(mixed.locator("video"))
+    mixed.get_by_role("button", name="Details", exact=True).click()
+    detail = page.get_by_role("dialog", name="Mixed media", exact=True)
+    expect(detail.locator("video")).to_have_count(2)
+    assert_playback(detail.locator("video").nth(1))
+    detail.get_by_role("button", name="View image 1 of 2 for Mixed media", exact=True).click()
+    viewer = page.get_by_role("dialog", name="Mixed media image viewer", exact=True)
+    expect(viewer.get_by_text("Image 1 of 2", exact=True)).to_be_visible()
+    page.keyboard.press("ArrowRight")
+    image = viewer.locator("img")
+    expect(image).to_have_attribute("src", "https://image.xx.fbcdn.net/video-poster.svg")
+    page.wait_for_function("el => el.complete && el.naturalWidth > 0", arg=image.element_handle())
+    page.keyboard.press("Escape")
+    expect(detail).to_be_visible()
+    expect(detail.locator(".ad-date time")).to_have_attribute("datetime", "2026-01-05")
+    detail.get_by_role("button", name="Close", exact=True).click()

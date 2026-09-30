@@ -36,7 +36,7 @@ jobs:
       - run: npm ci && npm run format:check && npm run build
         working-directory: web
       - run: uv run python -m playwright install --with-deps chromium
-      - run: uv run pytest tests/test_browser.py -q
+      - run: uv run pytest -q
         env:
           RUN_BROWSER_TESTS: 1
   container:

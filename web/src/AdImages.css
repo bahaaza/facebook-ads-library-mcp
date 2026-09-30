@@ -1,0 +1,119 @@
+.ad-images-cover img {
+  cursor: zoom-in;
+}
+.ad-image-count {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: #17251ee6;
+  color: white;
+  font-size: 11px;
+  z-index: 2;
+}
+.ad-image-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 100px;
+  color: #68776f;
+}
+.ad-image-collection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.ad-image-collection button {
+  min-width: 0;
+  height: 150px;
+  padding: 5px;
+  background: #f6f8f2;
+  cursor: zoom-in;
+}
+.ad-image-collection button img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ad-image-viewer {
+  width: min(1100px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+  max-height: calc(100dvh - 40px);
+  border: 1px solid #dce4de;
+  border-radius: 12px;
+  padding: 16px;
+  color: #23372f;
+  background: #fff;
+  box-shadow: 0 20px 100px #13291d44;
+}
+.ad-image-viewer::backdrop {
+  background: #17251ecc;
+  backdrop-filter: blur(4px);
+}
+.ad-image-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.ad-image-viewer-header strong {
+  overflow-wrap: anywhere;
+}
+.ad-image-viewer-header button {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+}
+.ad-image-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: min(65dvh, 760px);
+  min-height: 0;
+  background: #f4f6f2;
+  border-radius: 6px;
+}
+.ad-image-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ad-image-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 12px 0;
+}
+.ad-image-controls button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.ad-image-original {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .ad-image-viewer {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 12px;
+  }
+  .ad-image-stage {
+    height: 58dvh;
+  }
+}

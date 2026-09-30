@@ -9,7 +9,7 @@ Forked from [RamsesAguirre777/facebook-ads-library-mcp](https://github.com/Ramse
 - Add competitors using their numeric Facebook Page ID or Ad Library **See all ads** link.
 - Monitor each Page in a specific country or all countries, every 1–168 hours.
 - Build a quiet first baseline, then receive alerts for newly observed ad IDs.
-- Browse collected copy, creative thumbnails, public creative variants, launch dates, and destination links.
+- Browse collected copy, play public ad videos, open images in the dashboard, and step through image slideshows. Each card shows the advertised start date separately from when Adwatch first observed it.
 - Search copy (including Arabic and Hebrew), filter by competitor, save examples, write notes, group similar copy, and export CSV.
 - Ignore individual ads to hide them from the gallery, including saved and new-ad views. Use **Ignored ads** to find and restore them. Choices survive future scans; history and notes remain in the CSV export with an `ignored` column.
 - Inspect every scan, its coverage warning, and the rendered text used as evidence.
@@ -60,6 +60,12 @@ Changing `PORT` also requires changing `PUBLIC_URL`. If port 18473 is already us
 A Facebook Page handle (`facebook.com/yourcompetitor`) is not a numeric Page ID. Broad keyword searches remain available through MCP, but monitoring uses exact Page IDs to avoid attributing unrelated advertisers to your competitors. Different countries can be separate watchlist entries.
 
 For your printing business, start with 5–10 direct competitors and save examples by offer: personalized gifts, business merchandise, event favors, signage, and seasonal products. Use notes to record the offer, price explicitly shown, turnaround, and CTA. Compare offers and presentation before deciding what to test in your own marketing. The tool does not infer ad budgets or performance.
+
+## View ad media and dates
+
+Play videos with the player controls in the gallery or ad details. Open an image inside the dashboard, then use the previous/next controls or keyboard arrows to browse multiple images. Press Escape or use Close to dismiss the image viewer. Media never starts playing automatically.
+
+**Advertised since** comes from Meta’s reported start date. **First observed** records when this installation collected the ad. Missing or invalid start dates display **Advertised date unavailable**.
 
 ## Alerts
 
@@ -112,8 +118,8 @@ The initial schema is created automatically on startup, including an additive `i
 - A missing card does not prove an ad has stopped. We retain history and last-seen timestamps. There are no inferred “stopped” alerts.
 - HTTP 403 can accompany readable ad cards. Success is based on actual parsed cards; an empty response, login prompt, or block is a failed read. A confirmed empty scan requires an explicit empty-results message.
 - Similar-copy grouping operates within the current gallery page, using copy/headline/CTA/destination, and does not prove identical media or campaign identity.
-- Thumbnails are remote public CDN links and can expire. Copy and extracted metadata persist; original Ad Library links remain available. Media is not downloaded or archived.
-- Some fields may be unavailable, especially video media and dynamic ad variants. The details dialog shows up to 20 public variants when available. Open the original ad for the full presentation.
+- Images and playable videos use remote public CDN links and can expire. If media fails to load, use the original Ad Library link. Copy and extracted metadata persist; media is not downloaded or archived.
+- Playback requires a public video URL; a preview image alone cannot be played. A fresh competitor scan collects available video URLs and additional images for previously stored ads. Some fields and dynamic variants may be unavailable; open the original ad for the full presentation.
 - Exact-Page scans verify numeric advertiser Page IDs from the public data. Unverified or other-Page records are excluded and mark coverage as partial. If visible cards cannot be attributed to the requested Page, the scan fails rather than mislabelling them.
 - Longevity, ad counts, and repeated creatives do not establish spend, sales, or profitability.
 
@@ -172,7 +178,7 @@ Production Compose always uses PostgreSQL. SQLite is for tests and single-worker
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest -q
-RUN_BROWSER_TESTS=1 uv run pytest tests/test_browser.py -q
+RUN_BROWSER_TESTS=1 uv run pytest -q
 # Dedicated disposable database; name must end in _test. These tests drop its schema.
 TEST_POSTGRES_URL=postgresql+psycopg://USER:PASSWORD@localhost:5432/adwatch_test uv run pytest tests/test_postgres.py -q
 ```

@@ -20,11 +20,13 @@ def _text(value):
 
 
 def _media(item):
-    return (
-        item.get("resized_image_url")
-        or item.get("original_image_url")
-        or item.get("video_preview_image_url")
-        or ""
+    return next(
+        (
+            value
+            for key in ("resized_image_url", "original_image_url", "video_preview_image_url")
+            if isinstance(value := item.get(key), str) and value
+        ),
+        "",
     )
 
 
@@ -69,6 +71,7 @@ def extract_records(payload) -> list[dict]:
         if primary_video is None:
             primary_video = video_items[0] if video_items else {}
         first = cards[0] if cards else {}
+        creative_images = list(dict.fromkeys(_media(c) for c in images + cards if _media(c)))
         landing = _decode_landing_url(_text(snapshot.get("link_url") or first.get("link_url")))
         data = {
             "library_id": lid,
@@ -87,6 +90,7 @@ def extract_records(payload) -> list[dict]:
             # in videos and variants, rather than appearing as duplicate creatives.
             "creative_videos": list(dict.fromkeys(_video(c) for c in video_items if _video(c))),
             "videos": [_video_fields(c) for c in video_items],
+            "creative_images": creative_images,
             "platforms": [
                 str(p).replace("_", " ").title() for p in (item.get("publisher_platform") or [])
             ],
@@ -103,6 +107,7 @@ def extract_records(payload) -> list[dict]:
                     "link_text": _text(c.get("title")),
                     "creative_image": _media(c),
                     **_video_fields(c),
+                    "creative_images": [_media(c)] if _media(c) else [],
                     "landing_url": _text(c.get("link_url")),
                     "cta": _text(c.get("cta_text")),
                 }
