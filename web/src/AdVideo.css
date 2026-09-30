@@ -1,0 +1,62 @@
+.ad-video {
+  width: 100%;
+  min-width: 0;
+  background: #171c19;
+  color: #fff;
+}
+.ad-video video {
+  display: block;
+  width: 100%;
+  max-height: 440px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
+.ad-video-fallback {
+  position: relative;
+  min-height: 210px;
+  display: grid;
+  place-items: center;
+}
+.ad-video-fallback img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+.ad-video-message {
+  padding: 18px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ad-video-message p {
+  margin: 7px 0 12px;
+  color: #d8e1d6;
+}
+.ad-video-message a {
+  display: inline-block;
+  margin: 4px 8px;
+  color: #d6edc7;
+  text-decoration: underline;
+}
+.ad-video-message button {
+  margin: 4px 8px;
+}
+.ad-card-video {
+  position: relative;
+}
+.ad-card-video .ad-video video {
+  height: 230px;
+}
+.ad-card-video .new-badge,
+.ad-card-video .group-badge {
+  pointer-events: none;
+}
+.ad-card-video .group-badge {
+  top: 44px;
+  bottom: auto;
+}
+.ad-detail > .ad-video {
+  margin: 16px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
