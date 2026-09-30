@@ -28,6 +28,20 @@ def _media(item):
     )
 
 
+def _video(item):
+    """A preview image is never a playable video source."""
+    return _text(item.get("video_hd_url")) or _text(item.get("video_sd_url"))
+
+
+def _video_fields(item):
+    return {
+        "creative_video": _video(item),
+        "video_hd_url": _text(item.get("video_hd_url")),
+        "video_sd_url": _text(item.get("video_sd_url")),
+        "video_preview_image_url": _text(item.get("video_preview_image_url")),
+    }
+
+
 def extract_records(payload) -> list[dict]:
     result = {}
     stack = [payload]
@@ -46,6 +60,14 @@ def extract_records(payload) -> list[dict]:
         cards = [c for c in (snapshot.get("cards") or []) if isinstance(c, dict)]
         images = [c for c in (snapshot.get("images") or []) if isinstance(c, dict)]
         videos = [c for c in (snapshot.get("videos") or []) if isinstance(c, dict)]
+        video_items = [
+            c
+            for c in videos + cards + [snapshot]
+            if _video(c) or _text(c.get("video_preview_image_url"))
+        ]
+        primary_video = next((c for c in video_items if _video(c)), None)
+        if primary_video is None:
+            primary_video = video_items[0] if video_items else {}
         first = cards[0] if cards else {}
         landing = _decode_landing_url(_text(snapshot.get("link_url") or first.get("link_url")))
         data = {
@@ -60,6 +82,11 @@ def extract_records(payload) -> list[dict]:
             "landing_url": landing,
             "landing_domain": urlparse(landing).netloc,
             "creative_image": next((_media(c) for c in images + videos + cards if _media(c)), ""),
+            **_video_fields(primary_video),
+            # One preferred source per creative; HD/SD alternatives remain available
+            # in videos and variants, rather than appearing as duplicate creatives.
+            "creative_videos": list(dict.fromkeys(_video(c) for c in video_items if _video(c))),
+            "videos": [_video_fields(c) for c in video_items],
             "platforms": [
                 str(p).replace("_", " ").title() for p in (item.get("publisher_platform") or [])
             ],
@@ -75,6 +102,7 @@ def extract_records(payload) -> list[dict]:
                     "body": _text(c.get("body")),
                     "link_text": _text(c.get("title")),
                     "creative_image": _media(c),
+                    **_video_fields(c),
                     "landing_url": _text(c.get("link_url")),
                     "cta": _text(c.get("cta_text")),
                 }

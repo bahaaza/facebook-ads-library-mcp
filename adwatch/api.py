@@ -109,6 +109,7 @@ async def headers(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' https://*.fbcdn.net https://*.facebook.com data:; "
+        "media-src 'self' https://*.fbcdn.net https://*.facebook.com; "
         "style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
     )
     return response

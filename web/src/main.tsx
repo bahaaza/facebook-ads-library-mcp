@@ -29,6 +29,34 @@ import {
   X,
 } from "lucide-react";
 import "./style.css";
+import AdVideo from "./AdVideo";
+
+type VideoCreative = {
+  creative_video?: string;
+  creative_videos?: string[];
+  video_hd_url?: string;
+  video_sd_url?: string;
+  video_preview_image_url?: string;
+  creative_image?: string;
+};
+const hasVideo = (data: VideoCreative) =>
+  !!(
+    data.creative_video ||
+    data.creative_videos?.length ||
+    data.video_hd_url ||
+    data.video_sd_url ||
+    data.video_preview_image_url
+  );
+const videoProps = (data: VideoCreative, adUrl: string) => ({
+  src:
+    data.creative_video ||
+    data.video_hd_url ||
+    data.video_sd_url ||
+    data.creative_videos?.[0],
+  sources: [data.video_hd_url, data.video_sd_url].filter(Boolean) as string[],
+  poster: data.video_preview_image_url || data.creative_image,
+  adUrl,
+});
 
 type Scan = {
   id: number;
@@ -69,7 +97,7 @@ type Ad = {
   ignored: boolean;
   notes: string;
   creative_key: string;
-  data: {
+  data: VideoCreative & {
     body?: string;
     link_text?: string;
     creative_image?: string;
@@ -78,13 +106,13 @@ type Ad = {
     cta?: string;
     page_id?: string;
     variant_count?: number;
-    variants?: {
+    variants?: (VideoCreative & {
       body?: string;
       link_text?: string;
       creative_image?: string;
       landing_url?: string;
       cta?: string;
-    }[];
+    })[];
     started_running?: string;
     status?: string;
     platforms?: string[];
@@ -322,6 +350,7 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
     history.replaceState(null, "", "/?tab=" + t);
   };
   const showAd = (ad: Ad) => {
+    document.querySelectorAll("video").forEach((video) => video.pause());
     setDetail(ad);
     setNote(ad.notes);
   };
@@ -684,31 +713,50 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                             )}
                           </button>
                         </div>
-                        <button className="creative" onClick={() => showAd(ad)}>
-                          {safeLink(ad.data.creative_image) ? (
-                            <img
-                              src={safeLink(ad.data.creative_image)}
-                              alt="Competitor ad creative"
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
+                        {hasVideo(ad.data) ? (
+                          <div className="ad-card-video">
+                            <AdVideo
+                              {...videoProps(ad.data, ad.data.ad_details_url)}
                             />
-                          ) : null}
-                          <span className="creative-fallback">
-                            <LayoutGrid size={30} />
-                            <span>View creative in Ad Library</span>
-                          </span>
-                          {!ad.baseline && (
-                            <span className="new-badge">Newly observed</span>
-                          )}
-                          {items.length > 1 && (
-                            <span className="group-badge">
-                              {items.length} with similar copy
+                            {!ad.baseline && (
+                              <span className="new-badge">Newly observed</span>
+                            )}
+                            {items.length > 1 && (
+                              <span className="group-badge">
+                                {items.length} with similar copy
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            className="creative"
+                            onClick={() => showAd(ad)}
+                          >
+                            {safeLink(ad.data.creative_image) ? (
+                              <img
+                                src={safeLink(ad.data.creative_image)}
+                                alt="Competitor ad creative"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                }}
+                              />
+                            ) : null}
+                            <span className="creative-fallback">
+                              <LayoutGrid size={30} />
+                              <span>View creative in Ad Library</span>
                             </span>
-                          )}
-                        </button>
+                            {!ad.baseline && (
+                              <span className="new-badge">Newly observed</span>
+                            )}
+                            {items.length > 1 && (
+                              <span className="group-badge">
+                                {items.length} with similar copy
+                              </span>
+                            )}
+                          </button>
+                        )}
                         <div className="ad-copy">
                           <small>
                             {ad.data.landing_domain ?? "Ad creative"}
@@ -1312,6 +1360,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
             </button>
             <div className="eyebrow">{detail.competitor_name}</div>
             <h2 id="ad-title">{detail.data.link_text || "Ad details"}</h2>
+            {hasVideo(detail.data) && (
+              <AdVideo
+                {...videoProps(detail.data, detail.data.ad_details_url)}
+              />
+            )}
             <p className="full-copy" dir="auto">
               {detail.data.body || "Ad copy unavailable."}
             </p>
@@ -1345,13 +1398,20 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                 <div className="variant-grid">
                   {detail.data.variants.map((variant, index) => (
                     <article key={index}>
-                      {safeLink(variant.creative_image) && (
-                        <img
-                          src={safeLink(variant.creative_image)}
-                          alt={`Ad variant ${index + 1}`}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
+                      {hasVideo(variant) ? (
+                        <AdVideo
+                          {...videoProps(variant, detail.data.ad_details_url)}
+                          label={`Ad variant ${index + 1} video`}
                         />
+                      ) : (
+                        safeLink(variant.creative_image) && (
+                          <img
+                            src={safeLink(variant.creative_image)}
+                            alt={`Ad variant ${index + 1}`}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                        )
                       )}
                       <strong>
                         {variant.link_text || `Variant ${index + 1}`}
