@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { AdDate } from "./AdDate";
 import {
   Activity,
   ArrowUpRight,
@@ -723,9 +724,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                               "Copy was not available in the rendered page."}
                           </p>
                         </div>
+                        <AdDate value={ad.data.started_running} />
                         <div className="ad-footer">
                           <span>
-                            <Clock3 size={13} /> Seen {date(ad.first_seen)}
+                            <Clock3 size={13} /> First observed{" "}
+                            {date(ad.first_seen)}
                           </span>
                           <button onClick={() => showAd(ad)}>
                             Details <ArrowUpRight size={15} />
@@ -1319,10 +1322,10 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
               <span>
                 Library ID <strong>{detail.library_id}</strong>
               </span>
-              <span>
-                Meta launch date{" "}
-                <strong>{detail.data.started_running || "Unavailable"}</strong>
-              </span>
+              <AdDate
+                value={detail.data.started_running}
+                className="ad-date--detail"
+              />
               <span>
                 First observed <strong>{date(detail.first_seen)}</strong>
               </span>
