@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { AdImages } from "./AdImages";
 import {
   Activity,
   ArrowUpRight,
@@ -73,6 +74,7 @@ type Ad = {
     body?: string;
     link_text?: string;
     creative_image?: string;
+    creative_images?: string[];
     landing_url?: string;
     landing_domain?: string;
     cta?: string;
@@ -82,6 +84,7 @@ type Ad = {
       body?: string;
       link_text?: string;
       creative_image?: string;
+      creative_images?: string[];
       landing_url?: string;
       cta?: string;
     }[];
@@ -684,22 +687,13 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                             )}
                           </button>
                         </div>
-                        <button className="creative" onClick={() => showAd(ad)}>
-                          {safeLink(ad.data.creative_image) ? (
-                            <img
-                              src={safeLink(ad.data.creative_image)}
-                              alt="Competitor ad creative"
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          ) : null}
-                          <span className="creative-fallback">
-                            <LayoutGrid size={30} />
-                            <span>View creative in Ad Library</span>
-                          </span>
+                        <AdImages
+                          data={ad.data}
+                          originalAdUrl={ad.data.ad_details_url}
+                          label={ad.data.link_text || "Ad creative"}
+                          cover
+                          onEmpty={() => showAd(ad)}
+                        >
                           {!ad.baseline && (
                             <span className="new-badge">Newly observed</span>
                           )}
@@ -708,7 +702,7 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                               {items.length} with similar copy
                             </span>
                           )}
-                        </button>
+                        </AdImages>
                         <div className="ad-copy">
                           <small>
                             {ad.data.landing_domain ?? "Ad creative"}
@@ -1312,6 +1306,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
             </button>
             <div className="eyebrow">{detail.competitor_name}</div>
             <h2 id="ad-title">{detail.data.link_text || "Ad details"}</h2>
+            <AdImages
+              data={detail.data}
+              originalAdUrl={detail.data.ad_details_url}
+              label={detail.data.link_text || "Ad creative"}
+            />
             <p className="full-copy" dir="auto">
               {detail.data.body || "Ad copy unavailable."}
             </p>
@@ -1345,14 +1344,11 @@ function App({ onLogout }: { onLogout: () => Promise<void> }) {
                 <div className="variant-grid">
                   {detail.data.variants.map((variant, index) => (
                     <article key={index}>
-                      {safeLink(variant.creative_image) && (
-                        <img
-                          src={safeLink(variant.creative_image)}
-                          alt={`Ad variant ${index + 1}`}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                      )}
+                      <AdImages
+                        data={variant}
+                        originalAdUrl={detail.data.ad_details_url}
+                        label={`Ad variant ${index + 1}`}
+                      />
                       <strong>
                         {variant.link_text || `Variant ${index + 1}`}
                       </strong>

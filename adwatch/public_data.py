@@ -20,11 +20,13 @@ def _text(value):
 
 
 def _media(item):
-    return (
-        item.get("resized_image_url")
-        or item.get("original_image_url")
-        or item.get("video_preview_image_url")
-        or ""
+    return next(
+        (
+            value
+            for key in ("resized_image_url", "original_image_url", "video_preview_image_url")
+            if isinstance(value := item.get(key), str) and value
+        ),
+        "",
     )
 
 
@@ -47,6 +49,7 @@ def extract_records(payload) -> list[dict]:
         images = [c for c in (snapshot.get("images") or []) if isinstance(c, dict)]
         videos = [c for c in (snapshot.get("videos") or []) if isinstance(c, dict)]
         first = cards[0] if cards else {}
+        creative_images = list(dict.fromkeys(_media(c) for c in images + cards if _media(c)))
         landing = _decode_landing_url(_text(snapshot.get("link_url") or first.get("link_url")))
         data = {
             "library_id": lid,
@@ -60,6 +63,7 @@ def extract_records(payload) -> list[dict]:
             "landing_url": landing,
             "landing_domain": urlparse(landing).netloc,
             "creative_image": next((_media(c) for c in images + videos + cards if _media(c)), ""),
+            "creative_images": creative_images,
             "platforms": [
                 str(p).replace("_", " ").title() for p in (item.get("publisher_platform") or [])
             ],
@@ -75,6 +79,7 @@ def extract_records(payload) -> list[dict]:
                     "body": _text(c.get("body")),
                     "link_text": _text(c.get("title")),
                     "creative_image": _media(c),
+                    "creative_images": [_media(c)] if _media(c) else [],
                     "landing_url": _text(c.get("link_url")),
                     "cta": _text(c.get("cta_text")),
                 }
